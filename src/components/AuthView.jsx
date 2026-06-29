@@ -3,6 +3,8 @@ import { login, register, setToken } from '../api';
 import { signInWithGoogleRedirect, getGoogleRedirectResult, resetPassword } from '../firebase';
 import ForgotPasswordModal from './ForgotPasswordModal';
 
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
+
 export default function AuthView({ onLoginSuccess }) {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -14,7 +16,6 @@ export default function AuthView({ onLoginSuccess }) {
   const [success, setSuccess] = useState('');
   const [showForgotModal, setShowForgotModal] = useState(false);
 
-  // Cargar email guardado
   useEffect(() => {
     const savedEmail = localStorage.getItem('remembered_email');
     if (savedEmail) {
@@ -24,41 +25,35 @@ export default function AuthView({ onLoginSuccess }) {
   }, []);
 
   // Manejar el resultado de la redirección de Google
-  import React, { useState, useEffect } from 'react';
-import { login, register, setToken } from '../api';
-import { auth, googleProvider } from '../firebase';
-import { signInWithRedirect, onAuthStateChanged } from 'firebase/auth';
-// ...
-
-useEffect(() => {
-  // Escucha cambios en el estado de autenticación de Firebase
-  const unsubscribe = onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      // Usuario autenticado en Firebase
+  useEffect(() => {
+    const handleRedirectResult = async () => {
       try {
-        const res = await fetch(`${API_BASE}/auth/google`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            email: user.email,
-            name: user.displayName,
-            google_id: user.uid
-          })
-        });
-        const data = await res.json();
-        if (res.ok) {
-          setToken(data.token);
-          onLoginSuccess(data.user);
-        } else {
-          setError(data.error || 'Error al iniciar sesión con Google');
+        const result = await getGoogleRedirectResult();
+        if (result) {
+          const user = result.user;
+          const res = await fetch(`${API_BASE}/auth/google`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: user.email,
+              name: user.displayName,
+              google_id: user.uid
+            })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            setToken(data.token);
+            onLoginSuccess(data.user);
+          } else {
+            setError(data.error || 'Error al iniciar sesión con Google');
+          }
         }
       } catch (err) {
         setError(err.message);
       }
-    }
-  });
-  return () => unsubscribe();
-}, []);
+    };
+    handleRedirectResult();
+  }, []);
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -103,8 +98,8 @@ useEffect(() => {
   };
 
   const handleGoogleLogin = () => {
-  signInWithRedirect(auth, googleProvider);
-};
+    signInWithGoogleRedirect();
+  };
 
   const handleForgotPassword = async (emailRecovery) => {
     try {
