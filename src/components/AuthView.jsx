@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { login, register, setToken } from '../api';
-import { signInWithGoogle, resetPassword } from '../firebase';
+import { signInWithGoogleRedirect, getGoogleRedirectResult, resetPassword } from '../firebase';
 import ForgotPasswordModal from './ForgotPasswordModal';
 
 export default function AuthView({ onLoginSuccess }) {
@@ -14,12 +14,44 @@ export default function AuthView({ onLoginSuccess }) {
   const [success, setSuccess] = useState('');
   const [showForgotModal, setShowForgotModal] = useState(false);
 
+  // Cargar email guardado
   useEffect(() => {
     const savedEmail = localStorage.getItem('remembered_email');
     if (savedEmail) {
       setEmail(savedEmail);
       setRememberMe(true);
     }
+  }, []);
+
+  // Manejar el resultado de la redirección de Google
+  useEffect(() => {
+    const handleRedirectResult = async () => {
+      try {
+        const result = await getGoogleRedirectResult();
+        if (result) {
+          const user = result.user;
+          const res = await fetch('/api/auth/google', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: user.email,
+              name: user.displayName,
+              google_id: user.uid
+            })
+          });
+          const data = await res.json();
+          if (res.ok) {
+            setToken(data.token);
+            onLoginSuccess(data.user);
+          } else {
+            setError(data.error || 'Error al iniciar sesión con Google');
+          }
+        }
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+    handleRedirectResult();
   }, []);
 
   const handleLogin = async (e) => {
@@ -64,29 +96,13 @@ export default function AuthView({ onLoginSuccess }) {
     }
   };
 
-      const handleGoogleLogin = async () => {
-  try {
-    const googleUser = await signInWithGoogle(); // retorna { email, name, id }
-    const res = await fetch('/api/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: googleUser.email,
-        name: googleUser.name,
-        google_id: googleUser.id
-      })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setToken(data.token);          // Ahora setToken está definido
-      onLoginSuccess(data.user);
-    } else {
-      setError(data.error || 'Error al iniciar sesión con Google');
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithGoogleRedirect();
+    } catch (err) {
+      setError(err.message);
     }
-  } catch (err) {
-    setError(err.message);
-  }
-};
+  };
 
   const handleForgotPassword = async (emailRecovery) => {
     try {
@@ -134,9 +150,8 @@ export default function AuthView({ onLoginSuccess }) {
               <p>o inicia con</p>
               <div className="social-buttons">
                 <button type="button" className="btn social" onClick={handleGoogleLogin}>
-                 <span role="img" aria-label="Google">🔵</span> Google
-                  </button>
-                {/* Otro botón de Facebook se puede agregar similar */}
+                  <span role="img" aria-label="Google">🔵</span> Google
+                </button>
               </div>
             </div>
 
@@ -172,7 +187,7 @@ export default function AuthView({ onLoginSuccess }) {
               <p>o registrarte con</p>
               <div className="social-buttons">
                 <button type="button" className="btn social" onClick={handleGoogleLogin}>
-                <span role="img" aria-label="Google">🔵</span> Google
+                  <span role="img" aria-label="Google">🔵</span> Google
                 </button>
               </div>
             </div>
